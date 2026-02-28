@@ -1,0 +1,5 @@
+{
+  "name": "Bora Finanças",
+  "description": "Aplicativo de finanças pessoais moderno e seguro com controle de gastos, gestão de cartões e dashboard intuitivo com comandos de voz.",
+  "requestFramePermissions": ["microphone"]
+}
