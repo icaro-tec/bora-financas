@@ -14,7 +14,11 @@ interface FinanceContextType {
 const FinanceContext = createContext<FinanceContextType | undefined>(undefined);
 
 export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>(() => {
+    const saved = localStorage.getItem('bora_transactions');
+    return saved ? JSON.parse(saved) : [];
+  });
+  
   const [cards, setCards] = useState<CreditCard[]>([
     {
       id: '1',
@@ -26,7 +30,14 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       currentInvoice: 1250.50,
     }
   ]);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    return localStorage.getItem('bora_auth') === 'true';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('bora_transactions', JSON.stringify(transactions));
+  }, [transactions]);
 
   const stats: UserStats = {
     totalBalance: transactions.reduce((acc, t) => acc + (t.type === 'income' ? t.amount : -t.amount), 5000),
@@ -42,12 +53,16 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const login = (pin: string) => {
     if (pin === '1234') {
       setIsAuthenticated(true);
+      localStorage.setItem('bora_auth', 'true');
       return true;
     }
     return false;
   };
 
-  const logout = () => setIsAuthenticated(false);
+  const logout = () => {
+    setIsAuthenticated(false);
+    localStorage.removeItem('bora_auth');
+  };
 
   return (
     <FinanceContext.Provider value={{ transactions, cards, stats, addTransaction, isAuthenticated, login, logout }}>

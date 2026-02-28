@@ -16,9 +16,12 @@ export const VoiceCommand: React.FC<VoiceCommandProps> = ({ isOpen, onClose }) =
   const { addTransaction } = useFinance();
 
   const processVoiceCommand = useCallback(async (text: string) => {
+    // Using the API key provided by the user
+    const apiKey = "AIzaSyDlHNxpN0mIaZs4-YEXVRbQm4s6oIu_w1M";
+    
     setIsProcessing(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const ai = new GoogleGenAI({ apiKey });
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: `Extraia informações de transação financeira do seguinte texto em português: "${text}". 
