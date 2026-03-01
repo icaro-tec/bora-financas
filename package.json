@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
     "build": "vite build",
-    "postinstall": "chmod +x android/gradlew || true",
+    "postinstall": "sed -i 's/\\r$//' android/gradlew && chmod +x android/gradlew || true",
     "sync": "npx cap sync android",
     "preview": "vite preview",
     "clean": "rm -rf dist",
