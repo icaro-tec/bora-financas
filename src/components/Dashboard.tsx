@@ -20,18 +20,34 @@ import {
 } from 'recharts';
 import { motion } from 'motion/react';
 
-const data = [
-  { name: 'Seg', gastos: 400 },
-  { name: 'Ter', gastos: 300 },
-  { name: 'Qua', gastos: 200 },
-  { name: 'Qui', gastos: 278 },
-  { name: 'Sex', gastos: 189 },
-  { name: 'Sáb', gastos: 239 },
-  { name: 'Dom', gastos: 349 },
-];
-
 export const Dashboard: React.FC = () => {
   const { stats, cards, transactions } = useFinance();
+
+  // Generate dynamic chart data from last 7 days
+  const chartData = React.useMemo(() => {
+    const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+    const last7Days = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() - (6 - i));
+      return {
+        name: days[d.getDay()],
+        dateStr: d.toISOString().split('T')[0],
+        gastos: 0
+      };
+    });
+
+    transactions.forEach(t => {
+      if (t.type === 'expense') {
+        const tDate = t.date.split('T')[0];
+        const day = last7Days.find(d => d.dateStr === tDate);
+        if (day) {
+          day.gastos += t.amount;
+        }
+      }
+    });
+
+    return last7Days;
+  }, [transactions]);
 
   return (
     <div className="pb-24 bg-slate-50 min-h-screen">
@@ -69,11 +85,11 @@ export const Dashboard: React.FC = () => {
       <div className="p-6">
         <div className="flex justify-between items-center mb-4 px-2">
           <h3 className="font-bold text-slate-800 text-sm uppercase tracking-wider">Atividade</h3>
-          <button className="text-xs text-indigo-600 font-bold">Semanal</button>
+          <button className="text-xs text-indigo-600 font-bold">Últimos 7 dias</button>
         </div>
         <div className="h-56 w-full bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={data}>
+            <AreaChart data={chartData}>
               <defs>
                 <linearGradient id="colorGastos" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.1}/>
@@ -89,6 +105,7 @@ export const Dashboard: React.FC = () => {
               />
               <Tooltip 
                 contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)', padding: '12px' }}
+                formatter={(value: number) => [formatCurrency(value), 'Gastos']}
               />
               <Area 
                 type="monotone" 

@@ -19,17 +19,20 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return saved ? JSON.parse(saved) : [];
   });
   
-  const [cards, setCards] = useState<CreditCard[]>([
-    {
-      id: '1',
-      brand: 'Visa Platinum',
-      lastFour: '4582',
-      limit: 15000,
-      usedLimit: 3450.20,
-      closingDate: '2026-03-10',
-      currentInvoice: 1250.50,
-    }
-  ]);
+  const [cards, setCards] = useState<CreditCard[]>(() => {
+    const saved = localStorage.getItem('bora_cards');
+    return saved ? JSON.parse(saved) : [
+      {
+        id: '1',
+        brand: 'Visa Platinum',
+        lastFour: '4582',
+        limit: 15000,
+        usedLimit: 3450.20,
+        closingDate: '2026-03-10',
+        currentInvoice: 1250.50,
+      }
+    ];
+  });
 
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     return localStorage.getItem('bora_auth') === 'true';
@@ -38,6 +41,10 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => {
     localStorage.setItem('bora_transactions', JSON.stringify(transactions));
   }, [transactions]);
+
+  useEffect(() => {
+    localStorage.setItem('bora_cards', JSON.stringify(cards));
+  }, [cards]);
 
   const stats: UserStats = {
     totalBalance: transactions.reduce((acc, t) => acc + (t.type === 'income' ? t.amount : -t.amount), 5000),
@@ -48,6 +55,20 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const addTransaction = (t: Omit<Transaction, 'id'>) => {
     const newTransaction = { ...t, id: Math.random().toString(36).substr(2, 9) };
     setTransactions(prev => [newTransaction, ...prev]);
+
+    // Update card if linked
+    if (t.cardId && t.type === 'expense') {
+      setCards(prev => prev.map(card => {
+        if (card.id === t.cardId) {
+          return {
+            ...card,
+            usedLimit: card.usedLimit + t.amount,
+            currentInvoice: card.currentInvoice + t.amount
+          };
+        }
+        return card;
+      }));
+    }
   };
 
   const login = (pin: string) => {

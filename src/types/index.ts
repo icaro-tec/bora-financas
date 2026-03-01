@@ -7,6 +7,7 @@ export interface Transaction {
   type: TransactionType;
   category: string;
   date: string;
+  cardId?: string;
 }
 
 export interface CreditCard {

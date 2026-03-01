@@ -112,6 +112,7 @@ const AppContent: React.FC = () => {
         <VoiceCommand 
           isOpen={isVoiceOpen} 
           onClose={() => setIsVoiceOpen(false)} 
+          setActiveTab={setActiveTab}
         />
       </main>
     </div>

@@ -7,57 +7,94 @@ import { GoogleGenAI } from "@google/genai";
 interface VoiceCommandProps {
   isOpen: boolean;
   onClose: () => void;
+  setActiveTab: (tab: string) => void;
 }
 
-export const VoiceCommand: React.FC<VoiceCommandProps> = ({ isOpen, onClose }) => {
+export const VoiceCommand: React.FC<VoiceCommandProps> = ({ isOpen, onClose, setActiveTab }) => {
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
-  const { addTransaction } = useFinance();
+  const [aiResponse, setAiResponse] = useState<string | null>(null);
+  const { addTransaction, stats, cards, logout } = useFinance();
 
   const processVoiceCommand = useCallback(async (text: string) => {
     // Using the API key provided by the user
     const apiKey = "AIzaSyDlHNxpN0mIaZs4-YEXVRbQm4s6oIu_w1M";
     
     setIsProcessing(true);
+    setAiResponse(null);
+
     try {
       const ai = new GoogleGenAI({ apiKey });
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: `Extraia informações de transação financeira do seguinte texto em português: "${text}". 
-        Retorne APENAS um JSON com os campos: description (string), amount (number), type ('income' | 'expense'), category (string).
-        Exemplo: "Recebi 50 reais de presente" -> {"description": "Presente", "amount": 50, "type": "income", "category": "Outros"}
-        Exemplo: "Gastei 30 reais no mercado" -> {"description": "Mercado", "amount": 30, "type": "expense", "category": "Mercado"}`,
+        contents: `Você é o assistente do app "Bora Finanças". Analise o comando: "${text}".
+        
+        Contexto Atual:
+        - Saldo Total: ${stats.totalBalance}
+        - Gastos do Mês: ${stats.monthlyExpenses}
+        - Ganhos do Mês: ${stats.monthlyIncome}
+        - Cartões: ${cards.map(c => `${c.brand} (Final ${c.lastFour}): Fatura ${c.currentInvoice}`).join(', ')}
+
+        Determine a intenção e retorne APENAS um JSON:
+        1. "add_transaction": Para adicionar gastos/ganhos. { "intent": "add_transaction", "params": { "description", "amount", "type", "category" }, "message": "Ok, adicionei [desc] de [valor]" }
+        2. "consult_invoice": Para saber valor de fatura. { "intent": "consult_invoice", "message": "Sua fatura do [cartão] está em [valor]" }
+        3. "consult_report": Para resumos de gastos. { "intent": "consult_report", "message": "Este mês você já gastou [valor]..." }
+        4. "navigate": Para mudar de tela (home, stats, cards, profile). { "intent": "navigate", "params": { "screen" }, "message": "Indo para [tela]..." }
+        5. "logout": Para sair. { "intent": "logout", "message": "Até logo!" }`,
         config: {
           responseMimeType: "application/json",
         }
       });
 
       const result = JSON.parse(response.text || '{}');
-      if (result.description && result.amount) {
-        addTransaction({
-          description: result.description,
-          amount: result.amount,
-          type: result.type || 'expense',
-          category: result.category || 'Outros',
-          date: new Date().toISOString(),
-        });
-        onClose();
-      }
+      setAiResponse(result.message);
+
+      // Execute actions based on intent
+      setTimeout(() => {
+        if (result.intent === 'add_transaction' && result.params) {
+          addTransaction({
+            description: result.params.description,
+            amount: result.params.amount,
+            type: result.params.type || 'expense',
+            category: result.params.category || 'Outros',
+            date: new Date().toISOString(),
+          });
+        } else if (result.intent === 'logout') {
+          logout();
+        } else if (result.intent === 'navigate' && result.params?.screen) {
+          setActiveTab(result.params.screen);
+        }
+        
+        // Speak the response
+        if (window.speechSynthesis) {
+          const utterance = new SpeechSynthesisUtterance(result.message);
+          utterance.lang = 'pt-BR';
+          window.speechSynthesis.speak(utterance);
+        }
+
+        // Close after a delay to let user read/hear
+        setTimeout(() => {
+          if (result.intent !== 'consult_report' && result.intent !== 'consult_invoice') {
+            onClose();
+          }
+        }, 3000);
+      }, 500);
+
     } catch (error) {
       console.error("Erro ao processar comando de voz:", error);
+      setAiResponse("Desculpe, não consegui entender. Tente novamente.");
     } finally {
       setIsProcessing(false);
-      setTranscript('');
     }
-  }, [addTransaction, onClose]);
+  }, [addTransaction, stats, cards, logout, onClose, setActiveTab]);
 
   useEffect(() => {
     if (!isOpen) return;
 
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      alert("Seu navegador não suporta reconhecimento de voz.");
+      alert("Seu navegador não suporta reconhecimento de voz nativo. Tente usar o Chrome ou um navegador compatível.");
       onClose();
       return;
     }
@@ -67,8 +104,24 @@ export const VoiceCommand: React.FC<VoiceCommandProps> = ({ isOpen, onClose }) =
     recognition.continuous = false;
     recognition.interimResults = true;
 
-    recognition.onstart = () => setIsListening(true);
-    recognition.onend = () => setIsListening(false);
+    recognition.onstart = () => {
+      setIsListening(true);
+      setAiResponse(null);
+    };
+    
+    recognition.onend = () => {
+      setIsListening(false);
+    };
+
+    recognition.onerror = (event: any) => {
+      console.error("Erro no reconhecimento:", event.error);
+      if (event.error === 'not-allowed') {
+        alert("Permissão de microfone negada. Por favor, habilite o microfone nas configurações do seu celular/navegador.");
+      }
+      setIsListening(false);
+      onClose();
+    };
+
     recognition.onresult = (event: any) => {
       const current = event.resultIndex;
       const transcriptText = event.results[current][0].transcript;
@@ -79,10 +132,16 @@ export const VoiceCommand: React.FC<VoiceCommandProps> = ({ isOpen, onClose }) =
       }
     };
 
-    recognition.start();
+    try {
+      recognition.start();
+    } catch (e) {
+      console.error("Falha ao iniciar reconhecimento:", e);
+    }
 
     return () => {
-      recognition.stop();
+      try {
+        recognition.stop();
+      } catch (e) {}
     };
   }, [isOpen, onClose, processVoiceCommand]);
 
@@ -135,17 +194,23 @@ export const VoiceCommand: React.FC<VoiceCommandProps> = ({ isOpen, onClose }) =
                   )}
                 </div>
                 <h2 className="text-xl font-bold text-slate-900 mb-2 tracking-tight">
-                  {isProcessing ? 'Processando...' : isListening ? 'Ouvindo...' : 'Aguardando...'}
+                  {isProcessing ? 'Analisando...' : aiResponse ? 'Bora lá!' : isListening ? 'Ouvindo...' : 'Aguardando...'}
                 </h2>
-                <p className="text-slate-500 text-sm px-4 font-medium">
-                  {transcript || 'Diga algo como "Gastei 50 reais com pizza"'}
+                <p className="text-slate-500 text-sm px-4 font-medium min-h-[40px]">
+                  {aiResponse || transcript || 'Diga: "Quanto gastei este mês?" ou "Qual a fatura do Visa?"'}
                 </p>
               </div>
 
               <div className="flex justify-center gap-4">
-                <div className="px-4 py-2 bg-slate-50 rounded-full text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                  Português (Brasil)
-                </div>
+                {aiResponse ? (
+                  <div className="px-4 py-2 bg-indigo-600 rounded-full text-[10px] font-bold text-white uppercase tracking-widest animate-pulse">
+                    Comando Executado
+                  </div>
+                ) : (
+                  <div className="px-4 py-2 bg-slate-50 rounded-full text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                    Português (Brasil)
+                  </div>
+                )}
               </div>
             </div>
           </motion.div>
