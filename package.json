@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
     "build": "vite build",
-    "postbuild": "npx cap add android || npx cap sync android",
+    "postinstall": "chmod +x android/gradlew || true",
+    "sync": "npx cap sync android",
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit"
