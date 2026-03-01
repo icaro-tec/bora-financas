@@ -1,0 +1,8 @@
+{
+  "appId": "com.borafinancas.app",
+  "appName": "Bora Finanças",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  }
+}
